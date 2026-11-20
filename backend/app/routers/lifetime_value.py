@@ -6,7 +6,12 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 
 from app.schemas import ActionPayload, ActionResult
-from app.services.lifetime_value import predict_ltv, get_ltv_result, ltv_with_retention
+from app.services.lifetime_value import (
+    predict_ltv,
+    get_ltv_result,
+    ltv_with_retention,
+    calibrate_ltv_with_cohorts,
+)
 from app.store import store
 
 router = APIRouter(prefix="/api/lifetime-value", tags=["lifetime_value"])
@@ -55,7 +60,13 @@ def result(model_id: str) -> dict[str, Any]:
 def calibrate(model_id: str, payload: dict[str, Any]) -> ActionResult:
     retention_config_id = payload.get("retention_config_id", "")
     try:
-        result = ltv_with_retention(model_id, retention_config_id)
+        result = calibrate_ltv_with_cohorts(
+            model_id,
+            retention_config_id,
+            as_of_date=payload.get("as_of_date") or None,
+            basis_day_age=payload.get("basis_day_age"),
+            version=payload.get("version") or None,
+        )
         return ActionResult(ok=True, message="Calibrated", entry=result)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

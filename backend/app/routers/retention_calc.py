@@ -6,7 +6,12 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 
 from app.schemas import ActionPayload, ActionResult
-from app.services.retention_calc import calculate_retention, get_retention_result
+from app.services.retention_calc import (
+    calculate_retention,
+    get_retention_result,
+    get_cohort_detail,
+    confirm_cohort_size,
+)
 from app.store import store
 
 router = APIRouter(prefix="/api/retention-calc", tags=["retention_calc"])
@@ -49,6 +54,34 @@ def result(config_id: str) -> dict[str, Any]:
     if res is None:
         raise HTTPException(status_code=404, detail="Result not found")
     return res
+
+
+@router.get("/{config_id}/cohort-detail")
+def cohort_detail(config_id: str, as_of_date: str | None = None,
+                  cohort_date: str | None = None, channel: str | None = None,
+                  day_age: int | None = None, version: str | None = None) -> dict[str, Any]:
+    """按观察天龄查询留存队列明细：跨入组批次时间对齐，区分未观察到与确认的零留存。"""
+    try:
+        return get_cohort_detail(config_id, as_of_date=as_of_date, cohort_date=cohort_date,
+                                 channel=channel, day_age=day_age, version=version)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/{config_id}/cohort-size/confirm")
+def confirm_size(config_id: str, payload: dict[str, Any]) -> ActionResult:
+    """确认一个入组批次的入组人数，按版本登记，供明细查询回查。"""
+    try:
+        snapshot = confirm_cohort_size(
+            config_id,
+            cohort_date=payload.get("cohort_date", ""),
+            channel=payload.get("channel", ""),
+            cohort_size=int(payload.get("cohort_size", 0)),
+            version=payload.get("version", ""),
+        )
+        return ActionResult(ok=True, message="Confirmed", entry=snapshot)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.post("/{entry_id}/actions")
